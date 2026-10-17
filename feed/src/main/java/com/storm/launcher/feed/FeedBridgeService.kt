@@ -69,6 +69,9 @@ class FeedBridgeService : Service() {
         /** The last window Storm attached (windowAttached2's bundle and callback), handed on again on a new connection. */
         @Volatile private var attachedWindow: Pair<Bundle, IBinder?>? = null
 
+        /** Whether the Google app last reported its feed attached to Storm's window, see [StatusTap]. */
+        @Volatile private var isAttached = false
+
         /** The last activity state Storm reported (started 1, resumed 2), handed on with the window. */
         @Volatile private var activityState = 0
 
@@ -88,7 +91,7 @@ class FeedBridgeService : Service() {
                 WINDOW_ATTACHED_2 -> {
                     val bundle = data.readTypedObject(Bundle.CREATOR) ?: Bundle()
                     val callback = data.readStrongBinder()
-                    attachedWindow = withOwnPackage(bundle) to callback
+                    attachedWindow = withOwnPackage(bundle) to callback?.let { StatusTap(it) }
                     mainHandler.post { attachWindow() }
                     return true
                 }
@@ -97,9 +100,10 @@ class FeedBridgeService : Service() {
                     val state = data.readInt()
                     val resumed = state and ACTIVITY_RESUMED != 0 && activityState and ACTIVITY_RESUMED == 0
                     activityState = state
-                    // Coming to the front, connect afresh: that takes the feed back if another launcher (the phone's
-                    // own runs on for its recents screen) took it meanwhile. The new connection hands on this state.
-                    if (resumed) {
+                    // Coming to the front without the feed, connect afresh: that takes it back if another launcher (the
+                    // phone's own runs on for its recents screen) took it meanwhile. The new connection hands on this
+                    // state. With the feed still attached it stays as it is (open, back from a story it opened).
+                    if (resumed && !isAttached) {
                         mainHandler.post { connect() }
                         return true
                     }
@@ -123,6 +127,32 @@ class FeedBridgeService : Service() {
                 true
             } finally {
                 call.recycle()
+            }
+        }
+
+        /**
+         * Storm's callback, passed on unchanged, noting whether the feed is attached ([isAttached]). The Google app
+         * reports through it, so it's how this app learns the feed was taken away.
+         */
+        private inner class StatusTap(private val storm: IBinder) : Binder() {
+            override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+                if (code == INTERFACE_TRANSACTION) {
+                    reply?.writeString(CALLBACK_DESCRIPTOR)
+                    return true
+                }
+                if (code == CALLBACK_STATUS_CHANGED) {
+                    val start = data.dataPosition()
+                    runCatching {
+                        data.enforceInterface(CALLBACK_DESCRIPTOR)
+                        isAttached = data.readInt() and STATUS_ATTACHED != 0
+                    }
+                    data.setDataPosition(start)
+                }
+                return try {
+                    storm.transact(code, data, reply, flags)
+                } catch (e: RemoteException) {
+                    false
+                }
             }
         }
 
@@ -184,6 +214,7 @@ class FeedBridgeService : Service() {
             val conn = object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName, service: IBinder) {
                     if (connection !== this) return
+                    isAttached = false
                     overlay = service
                     isConnected = true
                     // Also when the Google app handed back the feed it had: the window attached to it may have been
@@ -193,6 +224,7 @@ class FeedBridgeService : Service() {
 
                 override fun onServiceDisconnected(name: ComponentName) {
                     if (connection !== this) return
+                    isAttached = false
                     overlay = null
                     isConnected = false
                 }
@@ -244,6 +276,7 @@ class FeedBridgeService : Service() {
         private const val GOOGLE_APP_PACKAGE = "com.google.android.googlequicksearchbox"
         private const val OVERLAY_ACTION = "com.android.launcher3.WINDOW_OVERLAY"
         private const val OVERLAY_DESCRIPTOR = "com.google.android.libraries.launcherclient.ILauncherOverlay"
+        private const val CALLBACK_DESCRIPTOR = "com.google.android.libraries.launcherclient.ILauncherOverlayCallback"
         private val CLIENT_VERSIONS = intArrayOf(9, 8)
 
         /** Connections made to the Google app since this process started, to alternate [CLIENT_VERSIONS]. */
@@ -257,5 +290,9 @@ class FeedBridgeService : Service() {
         private const val WINDOW_ATTACHED_2 = IBinder.FIRST_CALL_TRANSACTION + 13
         private const val SET_ACTIVITY_STATE = IBinder.FIRST_CALL_TRANSACTION + 15
         private const val ACTIVITY_RESUMED = 2
+
+        // ILauncherOverlayCallback: overlayStatusChanged, whose bit 1 is "attached"
+        private const val CALLBACK_STATUS_CHANGED = IBinder.FIRST_CALL_TRANSACTION + 1
+        private const val STATUS_ATTACHED = 1
     }
 }
