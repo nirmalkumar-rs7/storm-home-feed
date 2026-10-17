@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The feed's mark on Storm's icon: a card of headlines in the bottom-right, inside the icon's safe zone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF1A73E8"
+        android:pathData="M62,60h18a4,4 0,0 1,4 4v14a4,4 0,0 1,-4 4h-18a4,4 0,0 1,-4 -4v-14a4,4 0,0 1,4 -4z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M63,64h8v6h-8zM73,64h6v2h-6zM73,68h6v2h-6zM63,73h16v2h-16zM63,77h12v2h-12z" />
+</vector>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <!-- The Google app, whose feed this connects to -->
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <!-- Storm, to say whether it's installed and open it -->
+        <package android:name="com.storm.launcher" />
+        <package android:name="com.storm.launcher.debug" />
+    </queries>
+
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.StormFeed"
+        tools:ignore="HardcodedDebugMode">
+
+        <!-- What this app is for, and whether Storm is using it -->
+        <activity
+            android:name=".StatusActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Storm binds this; it only answers Storm's own packages -->
+        <service
+            android:name=".FeedBridgeService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="com.storm.launcher.feed.BRIDGE" />
+                <data android:scheme="app" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
