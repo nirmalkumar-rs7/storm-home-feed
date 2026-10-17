@@ -165,15 +165,16 @@ class FeedBridgeService : Service() {
          * Connects to the Google app afresh (on the main thread), keeping the old connection until the new one is made.
          *
          * The Google app keeps one feed for all its clients, tied to the uid of the first to connect, and starts afresh
-         * only for a client of another version: other launchers ask as 7 or 10, so this asks as 8, which the
-         * Google app treats as 7. Each connection's intent is new ([CONNECTION_KEY]): Android hands back the binder of
-         * an intent a service has seen before without asking it, and after another launcher connected that's a closed
-         * feed, which ignores every call.
+         * only for a client of another version; it refuses every call from any other uid. So each connection asks as
+         * the other of 8 and 9 ([CLIENT_VERSIONS], which the Google app treats as 7), never 7 or 10, which other
+         * launchers use: the Google app then always makes a feed of this app's own, also after a reinstall gave this
+         * app a new uid. Each connection's intent is new too ([CONNECTION_KEY]): Android hands back the binder of an
+         * intent a service has seen before without asking it.
          */
         fun connect() {
             val intent = Intent(OVERLAY_ACTION).setPackage(GOOGLE_APP_PACKAGE).setData(
                 Uri.Builder().scheme("app").encodedAuthority("$packageName:${Process.myUid()}")
-                    .appendQueryParameter("v", CLIENT_VERSION.toString())
+                    .appendQueryParameter("v", CLIENT_VERSIONS[connections.getAndIncrement() % CLIENT_VERSIONS.size].toString())
                     .apply { client.getQueryParameter("cv")?.let { appendQueryParameter("cv", it) } }
                     .appendQueryParameter(CONNECTION_KEY, SystemClock.elapsedRealtimeNanos().toString())
                     .build()
@@ -243,7 +244,10 @@ class FeedBridgeService : Service() {
         private const val GOOGLE_APP_PACKAGE = "com.google.android.googlequicksearchbox"
         private const val OVERLAY_ACTION = "com.android.launcher3.WINDOW_OVERLAY"
         private const val OVERLAY_DESCRIPTOR = "com.google.android.libraries.launcherclient.ILauncherOverlay"
-        private const val CLIENT_VERSION = 8
+        private val CLIENT_VERSIONS = intArrayOf(9, 8)
+
+        /** Connections made to the Google app since this process started, to alternate [CLIENT_VERSIONS]. */
+        private val connections = AtomicInteger()
         private const val CONNECTION_KEY = "storm_connection"
         private const val KEY_LAYOUT_PARAMS = "layout_params"
         private val CLIENT_PACKAGES = setOf("com.storm.launcher", "com.storm.launcher.debug")
