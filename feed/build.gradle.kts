@@ -19,7 +19,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 shrinks the relay; it touches only framework classes, so the default rules are enough
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             // What the Google app looks for; the relay holds nothing worth debugging into
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
