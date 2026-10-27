@@ -285,7 +285,7 @@ class FeedBridgeService : Service() {
         private const val KEY_LAYOUT_PARAMS = "layout_params"
         private val CLIENT_PACKAGES = setOf("com.storm.launcher", "com.storm.launcher.debug")
 
-        // ILauncherOverlay transaction codes, as Storm's GoogleDiscoverOverlay sends them
+        // ILauncherOverlay transaction codes, as Storm sends them
         private const val WINDOW_DETACHED = IBinder.FIRST_CALL_TRANSACTION + 4
         private const val WINDOW_ATTACHED_2 = IBinder.FIRST_CALL_TRANSACTION + 13
         private const val SET_ACTIVITY_STATE = IBinder.FIRST_CALL_TRANSACTION + 15

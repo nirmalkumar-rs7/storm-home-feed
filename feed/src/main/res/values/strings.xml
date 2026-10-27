@@ -8,6 +8,6 @@
     <string name="status_google_installed">The Google app is installed</string>
     <string name="status_google_missing">The Google app isn\'t installed, so there\'s no feed to show</string>
     <string name="status_connected">Storm is connected to the feed</string>
-    <string name="status_not_connected">Storm isn\'t connected. Turn on Google Discover in Storm\'s Settings › Home screen.</string>
+    <string name="status_not_connected">Storm isn\'t connected. Turn on Google Discover in Storm\'s Settings › Feed.</string>
     <string name="open_storm">Open Storm</string>
 </resources>
