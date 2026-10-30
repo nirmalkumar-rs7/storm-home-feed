@@ -72,6 +72,12 @@ class FeedBridgeService : Service() {
         /** Whether the Google app last reported its feed attached to Storm's window, see [StatusTap]. */
         @Volatile private var isAttached = false
 
+        /**
+         * Whether the feed was lost: the Google app reported it not attached, or the connection went. A new connection
+         * hasn't reported yet, which is not the same: connecting again then would drop the feed it's attaching.
+         */
+        @Volatile private var isDetached = false
+
         /** The last activity state Storm reported (started 1, resumed 2), handed on with the window. */
         @Volatile private var activityState = 0
 
@@ -100,10 +106,11 @@ class FeedBridgeService : Service() {
                     val state = data.readInt()
                     val resumed = state and ACTIVITY_RESUMED != 0 && activityState and ACTIVITY_RESUMED == 0
                     activityState = state
-                    // Coming to the front without the feed, connect afresh: that takes it back if another launcher (the
+                    if (resumed) takeBacks = 0
+                    // Coming to the front having lost the feed, connect afresh: that takes it back if another launcher (the
                     // phone's own runs on for its recents screen) took it meanwhile. The new connection hands on this
-                    // state. With the feed still attached it stays as it is (open, back from a story it opened).
-                    if (resumed && !isAttached) {
+                    // state. With the feed still attached, or still attaching, it stays as it is.
+                    if (resumed && isDetached) {
                         mainHandler.post { connect() }
                         return true
                     }
@@ -144,7 +151,10 @@ class FeedBridgeService : Service() {
                     val start = data.dataPosition()
                     runCatching {
                         data.enforceInterface(CALLBACK_DESCRIPTOR)
+                        val wasAttached = isAttached
                         isAttached = data.readInt() and STATUS_ATTACHED != 0
+                        isDetached = !isAttached
+                        if (wasAttached && !isAttached) mainHandler.postDelayed(takeBack, TAKE_BACK_DELAY_MS)
                     }
                     data.setDataPosition(start)
                 }
@@ -154,6 +164,20 @@ class FeedBridgeService : Service() {
                     false
                 }
             }
+        }
+
+        /** Feeds taken back by [takeBack] since Storm last came to the front. */
+        @Volatile private var takeBacks = 0
+
+        /**
+         * The feed was taken away while Storm is in front: the phone's own launcher (on a tablet it starts again for its
+         * recents screen just after Storm comes home) connected to the Google app, which then drops ours. Connect afresh
+         * once it has, a few times at most, so two launchers never trade the feed back and forth.
+         */
+        private val takeBack = Runnable {
+            if (isAttached || activityState and ACTIVITY_RESUMED == 0 || takeBacks >= MAX_TAKE_BACKS) return@Runnable
+            takeBacks++
+            connect()
         }
 
         /** Storm's window's layout params, naming this app: the Google app moves the feed only for the package bound to it. */
@@ -215,6 +239,7 @@ class FeedBridgeService : Service() {
                 override fun onServiceConnected(name: ComponentName, service: IBinder) {
                     if (connection !== this) return
                     isAttached = false
+                    isDetached = false
                     overlay = service
                     isConnected = true
                     // Also when the Google app handed back the feed it had: the window attached to it may have been
@@ -225,6 +250,7 @@ class FeedBridgeService : Service() {
                 override fun onServiceDisconnected(name: ComponentName) {
                     if (connection !== this) return
                     isAttached = false
+                    isDetached = true
                     overlay = null
                     isConnected = false
                 }
@@ -252,6 +278,7 @@ class FeedBridgeService : Service() {
         }
 
         fun disconnect() {
+            mainHandler.removeCallbacks(takeBack)
             connection?.let { runCatching { unbindService(it) } }
             priorityConnection?.let { runCatching { unbindService(it) } }
             connection = null
@@ -283,6 +310,8 @@ class FeedBridgeService : Service() {
         private val connections = AtomicInteger()
         private const val CONNECTION_KEY = "storm_connection"
         private const val KEY_LAYOUT_PARAMS = "layout_params"
+        private const val TAKE_BACK_DELAY_MS = 500L
+        private const val MAX_TAKE_BACKS = 3
         private val CLIENT_PACKAGES = setOf("com.storm.launcher", "com.storm.launcher.debug")
 
         // ILauncherOverlay transaction codes, as Storm sends them
